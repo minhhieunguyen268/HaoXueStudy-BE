@@ -7,6 +7,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { databaseConfig } from './config/database.config';
 import { AuthModule } from './modules/auth/auth.module';
+import { AiAssistantModule } from './modules/ai-assistant/ai-assistant.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { CharactersModule } from './modules/characters/characters.module';
 import { FlashcardsModule } from './modules/flashcards/flashcards.module';
@@ -38,6 +39,7 @@ import { VocabularyModule } from './modules/vocabulary/vocabulary.module';
       useFactory: databaseConfig,
     }),
     AuthModule,
+    AiAssistantModule,
     UsersModule,
     VocabularyModule,
     CharactersModule,
