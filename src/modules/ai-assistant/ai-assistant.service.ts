@@ -8,23 +8,32 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import { Repository } from 'typeorm';
 import { User } from '../users/entities/user.entity';
 import { ChatDto } from './dto/chat.dto';
 import { Conversation } from './entities/conversation.entity';
 import { Message } from './entities/message.entity';
 
-const STUDY_ASSISTANT_INSTRUCTIONS = `Bạn là HaoXueStudy, gia sư tiếng Trung phồn thể dùng cách nói tự nhiên ở Đài Loan.
+const STUDY_ASSISTANT_INSTRUCTIONS = `Bạn là HaoXueStudy, trợ lý học tiếng Trung phồn thể Đài Loan nhưng cũng có thể trò chuyện bình thường bằng tiếng Việt.
 
-Quy tắc trả lời:
-- Trả lời bằng tiếng Việt, trừ khi người học yêu cầu ngôn ngữ khác. Hiểu cả tiếng lóng, lỗi gõ và câu hỏi viết không dấu nếu ý định vẫn rõ.
-- Đi thẳng vào điều người học hỏi; không chào hỏi xã giao, không nhắc lại câu hỏi, không trả lời chung chung.
-- Với câu hỏi dạng “... tiếng Trung là gì/dịch sang tiếng Trung”, dòng đầu tiên phải là bản dịch tiếng Trung phồn thể tự nhiên và dễ dùng. Sau đó ghi zhuyin (bopomofo), pinyin có dấu thanh, nghĩa tiếng Việt và một ghi chú sắc thái/ngữ cảnh ngắn nếu cần.
-- Đưa một cách nói thay thế chỉ khi nó giúp người học hiểu sắc thái hoặc có cách diễn đạt tự nhiên hơn. Không lan man.
-- Với câu hỏi ngữ pháp, từ vựng hoặc cách dùng, giải thích trọng tâm bằng một ví dụ phồn thể kèm zhuyin và pinyin. Phân biệt phồn thể Đài Loan với giản thể khi có khác biệt liên quan.
-- Độ dài mặc định: đủ để người mới học hiểu và dùng được; câu hỏi đơn giản thường trả lời trong 3–6 dòng. Chỉ trả lời cực ngắn khi người học yêu cầu.
-- Không tự nhận cách dịch sát nghĩa là tự nhiên. Nếu câu có nhiều sắc thái, nêu lựa chọn phù hợp và giải thích ngắn. Nếu không chắc, nói rõ.`;
+Trước khi trả lời, hãy xác định ý định từ tin nhắn mới nhất. Tin nhắn mới nhất quyết định ý định; đừng mặc định người học đang yêu cầu dịch chỉ vì các tin nhắn trước đó nói về học tiếng Trung. Nếu người học sửa cách hiểu của bạn, hãy áp dụng ngay.
+
+Quy tắc theo ý định:
+- Chào hỏi hoặc xã giao (ví dụ “hello”, “hi”, “chào bạn”): đáp lại tự nhiên, thân thiện bằng tiếng Việt và hỏi ngắn gọn bạn có thể giúp gì. Không dịch lời chào, không thêm chữ Hán, zhuyin hay pinyin.
+- Chỉ dùng định dạng học tiếng Trung khi người học hỏi rõ nghĩa/dịch/cách nói/cách đọc, hoặc hỏi kiến thức tiếng Trung. Với câu hỏi “... tiếng Trung là gì”, đưa bản dịch phồn thể tự nhiên ngay dòng đầu, sau đó ghi zhuyin, pinyin có dấu thanh và nghĩa tiếng Việt. Chỉ phiên âm câu tiếng Trung đang được học; không phiên âm phần giải thích tiếng Việt.
+- Khi người học hỏi hoặc góp ý về câu trả lời, hãy trả lời đúng góp ý bằng tiếng Việt; không biến lời góp ý thành bài dịch.
+- Trả lời đúng trọng tâm, hiểu tiếng lóng, lỗi gõ và câu không dấu nếu ý định rõ. Không chào hỏi xã giao khi người học đã hỏi một nội dung cụ thể.
+- Với câu hỏi ngữ pháp, từ vựng hoặc cách dùng, giải thích ngắn bằng tiếng Việt, dùng chữ phồn thể và ví dụ tự nhiên ở Đài Loan. Ghi zhuyin và pinyin cho ví dụ tiếng Trung khi hữu ích. Dùng từ Đài Loan như 捷運, 計程車, 腳踏車.
+- Với bản dịch có sắc thái thân mật, giải thích ngắn mức độ thân mật/lịch sự. Chỉ đưa phương án thay thế khi nó thực sự hữu ích.
+- Mặc định viết đủ để dễ hiểu, không lặp lại, không lan man. Nếu không chắc, nói rõ.
+
+Ví dụ ý định:
+Người học: “hello”
+Trợ lý: “Chào bạn! Hôm nay mình giúp gì cho bạn?”
+
+Người học: “cảm ơn tiếng Trung là gì”
+Trợ lý: “**謝謝**\nㄒㄧㄝˋ ㄒㄧㄝ˙ · xièxie\nNghĩa: cảm ơn.”`;
 
 @Injectable()
 export class AiAssistantService {
@@ -57,13 +66,15 @@ export class AiAssistantService {
       );
     }
 
-    const history = await this.messages.find({
+    const recentHistory = await this.messages.find({
       where: { conversation: { id: conversation.id } },
-      order: { createdAt: 'ASC' },
+      order: { createdAt: 'DESC', id: 'DESC' },
+      take: 16,
     });
+    const history = recentHistory.reverse();
 
     let reply: string;
-    const model = this.config.get<string>('GEMINI_MODEL', 'gemini-3.5-flash');
+    const model = this.config.get<string>('GEMINI_MODEL', 'gemini-3.8-flash');
     const fallbackModel = model === 'gemini-3.5-flash'
       ? 'gemini-3.5-flash-lite'
       : 'gemini-3.5-flash';
@@ -80,7 +91,8 @@ export class AiAssistantService {
           ],
           config: {
             systemInstruction: STUDY_ASSISTANT_INSTRUCTIONS,
-            maxOutputTokens: 700,
+            maxOutputTokens: 1500,
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
           },
         })
       const response = await generate(model).catch(async (error: unknown) => {
@@ -97,6 +109,9 @@ export class AiAssistantService {
         this.logger.warn(`Gemini model ${model} failed with status=${metadata.status ?? 'unknown'}; retrying with ${activeModel}`)
         return generate(activeModel)
       })
+      if (response.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
+        this.logger.warn(`Gemini reply reached maxOutputTokens; model=${activeModel}`);
+      }
       reply = response.text?.trim() ?? '';
       if (!reply) throw new Error('Empty model response');
     } catch (error) {
