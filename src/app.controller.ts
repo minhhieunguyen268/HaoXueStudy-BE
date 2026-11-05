@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 export class AppController {
   constructor(private readonly appService: AppService) {}
 
+  // GET | `/` | Kiểm tra máy chủ NestJS đang hoạt động.
   @Get()
   getHello(): string {
     return this.appService.getHello();
