@@ -5,6 +5,8 @@ export interface VocabularyFilters {
   q?: string;
   category?: string;
   tocflLevel?: string;
+  bookCode?: string;
+  lessonNumber?: number | string;
   page?: number;
   pageSize?: number;
 }
@@ -12,6 +14,48 @@ export interface VocabularyFilters {
 @Injectable()
 export class VocabularyService {
   constructor(private readonly dataSource: DataSource) {}
+
+  async findBooks() {
+    const rows = (await this.dataSource.query(`
+      SELECT b.id, b.code, b.title, b.description,
+        COUNT(DISTINCT l.id) AS lessonCount,
+        COUNT(DISTINCT lv.vocabulary_id) AS vocabularyCount
+      FROM course_books b
+      LEFT JOIN course_lessons l ON l.book_id = b.id
+      LEFT JOIN course_lesson_vocabulary lv ON lv.lesson_id = l.id
+      GROUP BY b.id, b.code, b.title, b.description
+      ORDER BY b.id
+    `)) as Array<Record<string, unknown>>;
+
+    return rows.map((row) => ({
+      ...row,
+      id: Number(row.id),
+      lessonCount: Number(row.lessonCount),
+      vocabularyCount: Number(row.vocabularyCount),
+    }));
+  }
+
+  async findLessons(bookCode: string) {
+    const rows = (await this.dataSource.query(
+      `SELECT l.id, b.code AS bookCode, b.title AS bookTitle,
+        l.lesson_number AS lessonNumber, l.title,
+        COUNT(DISTINCT lv.vocabulary_id) AS vocabularyCount
+      FROM course_lessons l
+      JOIN course_books b ON b.id = l.book_id
+      LEFT JOIN course_lesson_vocabulary lv ON lv.lesson_id = l.id
+      WHERE b.code = ?
+      GROUP BY l.id, b.code, b.title, l.lesson_number, l.title
+      ORDER BY l.lesson_number`,
+      [bookCode],
+    )) as Array<Record<string, unknown>>;
+
+    return rows.map((row) => ({
+      ...row,
+      id: Number(row.id),
+      lessonNumber: Number(row.lessonNumber),
+      vocabularyCount: Number(row.vocabularyCount),
+    }));
+  }
 
   async findAll(filters: VocabularyFilters = {}) {
     const page = Math.max(1, Number(filters.page) || 1);
@@ -35,6 +79,20 @@ export class VocabularyService {
     if (filters.tocflLevel?.trim()) {
       conditions.push('v.tocfl_level = ?');
       values.push(filters.tocflLevel.trim().toUpperCase());
+    }
+    if (filters.bookCode?.trim()) {
+      const lessonNumber = Number(filters.lessonNumber);
+      const lessonCondition = Number.isInteger(lessonNumber) && lessonNumber > 0
+        ? ' AND l.lesson_number = ?'
+        : '';
+      conditions.push(`EXISTS (
+        SELECT 1 FROM course_lesson_vocabulary lv
+        JOIN course_lessons l ON l.id = lv.lesson_id
+        JOIN course_books b ON b.id = l.book_id
+        WHERE lv.vocabulary_id = v.id AND b.code = ?${lessonCondition}
+      )`);
+      values.push(filters.bookCode.trim());
+      if (lessonCondition) values.push(lessonNumber);
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
