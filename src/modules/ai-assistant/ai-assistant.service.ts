@@ -80,10 +80,10 @@ export class AiAssistantService {
       : 'gemini-3.5-flash';
     let activeModel = model;
     try {
-      const generate = (modelName: string) => client.models.generateContent({
+      const generate = (modelName: string, context = history) => client.models.generateContent({
           model: modelName,
           contents: [
-            ...history.map((message) => ({
+            ...context.map((message) => ({
               role: message.role === 'USER' ? ('user' as const) : ('model' as const),
               parts: [{ text: message.content }],
             })),
@@ -100,6 +100,7 @@ export class AiAssistantService {
         const shouldFallback = model !== fallbackModel
           && (metadata.status === 400
             || metadata.status === 404
+            || metadata.status === 502
             || metadata.status === 503
             || metadata.status === 504
             || /NOT_FOUND|INVALID_ARGUMENT/i.test(metadata.code ?? ''))
@@ -107,7 +108,7 @@ export class AiAssistantService {
         if (!shouldFallback) throw error
         activeModel = fallbackModel
         this.logger.warn(`Gemini model ${model} failed with status=${metadata.status ?? 'unknown'}; retrying with ${activeModel}`)
-        return generate(activeModel)
+        return generate(activeModel, history.slice(-4))
       })
       if (response.candidates?.[0]?.finishReason === 'MAX_TOKENS') {
         this.logger.warn(`Gemini reply reached maxOutputTokens; model=${activeModel}`);
@@ -126,6 +127,9 @@ export class AiAssistantService {
       }
       if (metadata.status === 400 || metadata.status === 404 || /NOT_FOUND|INVALID_ARGUMENT/i.test(metadata.code ?? '')) {
         throw new ServiceUnavailableException('Gemini không nhận model đã cấu hình. Kiểm tra GEMINI_MODEL và quyền truy cập model trong Google AI Studio.');
+      }
+      if (metadata.status === 504) {
+        throw new ServiceUnavailableException('Gemini đã quá thời gian phản hồi sau khi thử model dự phòng. Bạn có thể thử lại hoặc bắt đầu cuộc trò chuyện mới.');
       }
       if (!metadata.status) {
         throw new BadGatewayException('Backend không kết nối được Gemini. Kiểm tra kết nối mạng của backend.');
@@ -171,7 +175,7 @@ export class AiAssistantService {
     if (!apiKey) {
       throw new ServiceUnavailableException('GEMINI_API_KEY chưa được cấu hình trong backend .env.');
     }
-    this.client = new GoogleGenAI({ apiKey, httpOptions: { timeout: 30_000 } });
+    this.client = new GoogleGenAI({ apiKey, httpOptions: { timeout: 60_000 } });
     return this.client;
   }
 

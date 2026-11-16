@@ -13,6 +13,16 @@ export interface VocabularyFilters {
 
 @Injectable()
 export class VocabularyService {
+  findGrammar(bookCode: string) {
+    return this.dataSource.query(`SELECT l.lesson_number AS lessonNumber, g.title, g.pattern,
+      g.description, g.example, g.example_pinyin AS examplePinyin, g.translation
+      FROM course_lesson_grammar g
+      JOIN course_lessons l ON l.id = g.lesson_id
+      JOIN course_books b ON b.id = l.book_id
+      WHERE b.code = ? ORDER BY l.lesson_number, g.position`, [bookCode]);
+  }
+
+
   constructor(private readonly dataSource: DataSource) {}
 
   async findBooks() {

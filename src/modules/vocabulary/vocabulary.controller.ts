@@ -6,6 +6,13 @@ import type { VocabularyFilters } from './vocabulary.service';
 export class VocabularyController {
   constructor(private readonly vocabularyService: VocabularyService) {}
 
+  // GET | /api/vocabulary/books/:bookCode/grammar | Lấy ngữ pháp theo từng bài của giáo trình.
+  @Get('books/:bookCode/grammar')
+  findGrammar(@Param('bookCode') bookCode: string) {
+    return this.vocabularyService.findGrammar(bookCode);
+  }
+
+
   // GET | `/api/vocabulary/books` | Lấy danh sách giáo trình và số bài/từ đã gắn.
   @Get('books')
   findBooks() {
