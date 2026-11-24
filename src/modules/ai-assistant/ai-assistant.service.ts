@@ -75,9 +75,7 @@ export class AiAssistantService {
 
     let reply: string;
     const model = this.config.get<string>('GEMINI_MODEL', 'gemini-3.8-flash');
-    const fallbackModel = model === 'gemini-3.5-flash'
-      ? 'gemini-3.5-flash-lite'
-      : 'gemini-3.5-flash';
+    const fallbackModel = 'gemini-3.5-flash';
     let activeModel = model;
     try {
       const generate = (modelName: string, context = history) => client.models.generateContent({
