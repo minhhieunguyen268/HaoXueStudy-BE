@@ -1,11 +1,12 @@
 import { Body, Controller, Get, Param, ParseIntPipe, Post, Put, Req, UseGuards } from '@nestjs/common';
-import { IsInt, IsObject, Max, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsObject, IsOptional, Max, Min } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { LearningProgressService } from './learning-progress.service';
 
 class Checkpoint {
   @IsInt() @Min(0) revision!: number;
   @IsInt() @Min(0) step!: number;
+  @IsOptional() @IsBoolean() submit?: boolean;
   @IsObject() answers!: Record<string, string>;
 }
 class LegacyProgress {
@@ -26,6 +27,12 @@ export class LearningProgressController {
   @Post('import')
   import(@Req() req: Session, @Body() data: LegacyProgress) {
     return this.progress.import(req.user.userId, data.completed);
+  }
+
+  // GET | /api/learning-progress/a1/:lesson/quiz | Lấy câu hỏi và lựa chọn của bài cuối chương.
+  @Get(':lesson/quiz')
+  quiz(@Req() req: Session, @Param('lesson', ParseIntPipe) lesson: number) {
+    return this.progress.quiz(req.user.userId, lesson);
   }
 
   // PUT | /api/learning-progress/a1/:lesson | Lưu cấu trúc và đáp án, xét mở bài kế tiếp.

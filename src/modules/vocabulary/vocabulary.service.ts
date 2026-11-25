@@ -13,6 +13,15 @@ export interface VocabularyFilters {
 
 @Injectable()
 export class VocabularyService {
+  findDialogues(bookCode: string, lesson: number) {
+    return this.dataSource.query(`SELECT d.position, d.dialogue, d.speaker, d.traditional,
+      d.simplified, d.pinyin, d.meaning_vi AS meaningVi
+      FROM course_lesson_dialogues d
+      JOIN course_lessons l ON l.id = d.lesson_id
+      JOIN course_books b ON b.id = l.book_id
+      WHERE b.code = ? AND l.lesson_number = ? ORDER BY d.position`, [bookCode, lesson]);
+  }
+
   findGrammar(bookCode: string) {
     return this.dataSource.query(`SELECT l.lesson_number AS lessonNumber, g.title, g.pattern,
       g.description, g.example, g.example_pinyin AS examplePinyin, g.translation, g.details

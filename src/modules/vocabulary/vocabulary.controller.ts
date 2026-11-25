@@ -1,10 +1,16 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, ParseIntPipe, Query } from '@nestjs/common';
 import { VocabularyService } from './vocabulary.service';
 import type { VocabularyFilters } from './vocabulary.service';
 
 @Controller('api/vocabulary')
 export class VocabularyController {
   constructor(private readonly vocabularyService: VocabularyService) {}
+
+  // GET | /api/vocabulary/books/:bookCode/lessons/:lesson/dialogues | Lấy hội thoại theo thứ tự trong bài.
+  @Get('books/:bookCode/lessons/:lesson/dialogues')
+  findDialogues(@Param('bookCode') bookCode: string, @Param('lesson', ParseIntPipe) lesson: number) {
+    return this.vocabularyService.findDialogues(bookCode, lesson);
+  }
 
   // GET | /api/vocabulary/books/:bookCode/grammar | Lấy ngữ pháp theo từng bài của giáo trình.
   @Get('books/:bookCode/grammar')
